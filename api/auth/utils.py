@@ -8,7 +8,7 @@ from fastapi import Cookie, Depends
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import User
+from models import Admin, Customer
 
 SECRET_KEY = os.getenv("SECRET_KEY", "change-this-secret-key-in-production-min-32-chars")
 ALGORITHM = "HS256"
@@ -32,17 +32,31 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def get_current_user(
-    access_token: Optional[str] = Cookie(default=None),
-    db: Session = Depends(get_db),
-) -> Optional[User]:
-    if not access_token:
+def _decode_token(token: Optional[str]) -> Optional[str]:
+    if not token:
         return None
     try:
-        payload = jwt.decode(access_token, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get("sub")
-        if not email:
-            return None
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload.get("sub")
     except JWTError:
         return None
-    return db.query(User).filter(User.email == email, User.is_active == True).first()
+
+
+def get_current_admin(
+    access_token: Optional[str] = Cookie(default=None),
+    db: Session = Depends(get_db),
+) -> Optional[Admin]:
+    email = _decode_token(access_token)
+    if not email:
+        return None
+    return db.query(Admin).filter(Admin.email == email, Admin.is_active == True).first()
+
+
+def get_current_customer(
+    customer_token: Optional[str] = Cookie(default=None),
+    db: Session = Depends(get_db),
+) -> Optional[Customer]:
+    email = _decode_token(customer_token)
+    if not email:
+        return None
+    return db.query(Customer).filter(Customer.email == email, Customer.is_active == True).first()

@@ -1,0 +1,93 @@
+{% extends "shop/base.html" %}
+{% block title %}Panier — ShopItem{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-10">
+  <h1 class="text-2xl font-bold text-gray-800 mb-8">Mon panier</h1>
+
+  {% if cart_items %}
+  <div class="flex flex-col lg:flex-row gap-8">
+
+    <!-- Items -->
+    <div class="flex-1 space-y-4">
+      {% for ci in cart_items %}
+      <div class="bg-white rounded-xl border border-gray-200 p-4 flex gap-4 items-center">
+        {% if ci.item.image_url %}
+        <img src="{{ ci.item.image_url }}" alt="{{ ci.item.title }}" class="w-20 h-20 object-cover rounded-lg bg-gray-100 flex-shrink-0" onerror="this.src='https://placehold.co/80x80?text=?'"/>
+        {% else %}
+        <div class="w-20 h-20 bg-indigo-50 rounded-lg flex items-center justify-center flex-shrink-0">
+          <svg class="w-8 h-8 text-indigo-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10"/>
+          </svg>
+        </div>
+        {% endif %}
+
+        <div class="flex-1 min-w-0">
+          <p class="font-semibold text-gray-900 truncate">{{ ci.item.title }}</p>
+          <p class="text-sm text-gray-500 mt-0.5">{{ "%.2f"|format(ci.item.price_ttc) }} € / unité</p>
+        </div>
+
+        <!-- Quantity update form -->
+        <form method="POST" action="/cart/update" class="flex items-center gap-2">
+          <input type="hidden" name="item_id" value="{{ ci.item.id }}" />
+          <input type="number" name="quantity" value="{{ ci.quantity }}" min="1" max="{{ ci.item.quantity }}"
+                 class="w-16 px-2 py-1.5 border border-gray-300 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
+          <button type="submit" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium">Modifier</button>
+        </form>
+
+        <p class="text-base font-bold text-indigo-700 w-20 text-right">{{ "%.2f"|format(ci.subtotal_ttc) }} €</p>
+
+        <!-- Remove -->
+        <form method="POST" action="/cart/remove">
+          <input type="hidden" name="item_id" value="{{ ci.item.id }}" />
+          <button type="submit" class="p-1.5 text-gray-400 hover:text-red-500 transition-colors" title="Supprimer">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </form>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Summary -->
+    <div class="lg:w-72 flex-shrink-0">
+      <div class="bg-white rounded-xl border border-gray-200 p-6 sticky top-20">
+        <h2 class="font-semibold text-gray-800 mb-4">Récapitulatif</h2>
+        <div class="space-y-2 text-sm text-gray-600 mb-6">
+          <div class="flex justify-between">
+            <span>Sous-total</span>
+            <span class="font-medium text-gray-900">{{ "%.2f"|format(total_ttc) }} €</span>
+          </div>
+          <div class="flex justify-between">
+            <span>Livraison</span>
+            <span class="text-green-600 font-medium">Gratuite</span>
+          </div>
+          <div class="border-t pt-2 flex justify-between font-semibold text-gray-900">
+            <span>Total TTC</span>
+            <span class="text-indigo-700">{{ "%.2f"|format(total_ttc) }} €</span>
+          </div>
+        </div>
+        <a href="/checkout"
+           class="block w-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-3 rounded-lg text-center transition-colors">
+          Commander →
+        </a>
+        <a href="/" class="block text-center text-sm text-gray-500 hover:text-indigo-600 mt-3 transition-colors">
+          Continuer mes achats
+        </a>
+      </div>
+    </div>
+
+  </div>
+
+  {% else %}
+  <div class="text-center py-20">
+    <svg class="mx-auto w-12 h-12 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/>
+    </svg>
+    <p class="text-gray-400 mb-4">Votre panier est vide.</p>
+    <a href="/" class="text-indigo-600 hover:underline font-medium">Voir les articles →</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

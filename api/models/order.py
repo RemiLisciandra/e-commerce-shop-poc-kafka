@@ -17,14 +17,14 @@ class Order(Base):
     __tablename__ = "orders"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
     status = Column(Enum(OrderStatus), default=OrderStatus.PENDING)
     total_ht = Column(Float, nullable=False, default=0.0)
     total_ttc = Column(Float, nullable=False, default=0.0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    user = relationship("User", back_populates="orders")
+    customer = relationship("Customer", back_populates="orders")
     items = relationship("OrderItem", back_populates="order")
     payment = relationship("Payment", back_populates="order", uselist=False)
     invoice = relationship("Invoice", back_populates="order", uselist=False)

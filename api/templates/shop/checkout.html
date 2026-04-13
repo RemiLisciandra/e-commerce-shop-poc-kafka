@@ -1,0 +1,48 @@
+{% extends "shop/base.html" %}
+{% block title %}Commande — ShopItem{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 py-10">
+  <h1 class="text-2xl font-bold text-gray-800 mb-2">Finaliser ma commande</h1>
+  <p class="text-gray-500 text-sm mb-8">Vérifiez votre commande avant de confirmer.</p>
+
+  <!-- Customer info -->
+  <div class="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+    <h2 class="font-semibold text-gray-700 mb-3">Livraison</h2>
+    <p class="text-sm text-gray-600">{{ customer.first_name }} {{ customer.last_name }}</p>
+    <p class="text-sm text-gray-600">{{ customer.email }}</p>
+    {% if customer.phone %}<p class="text-sm text-gray-600">{{ customer.phone }}</p>{% endif %}
+    {% if customer.address %}<p class="text-sm text-gray-600 mt-1">{{ customer.address }}</p>
+    {% else %}<p class="text-sm text-amber-600 mt-1">Aucune adresse renseignée</p>{% endif %}
+  </div>
+
+  <!-- Order items -->
+  <div class="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100 mb-6">
+    {% for ci in cart_items %}
+    <div class="flex items-center gap-4 px-5 py-4">
+      <div class="flex-1 min-w-0">
+        <p class="font-medium text-gray-900 truncate">{{ ci.item.title }}</p>
+        <p class="text-xs text-gray-500">{{ ci.quantity }} × {{ "%.2f"|format(ci.item.price_ttc) }} €</p>
+      </div>
+      <p class="font-semibold text-indigo-700 whitespace-nowrap">{{ "%.2f"|format(ci.subtotal_ttc) }} €</p>
+    </div>
+    {% endfor %}
+    <div class="px-5 py-4 flex justify-between font-semibold text-gray-900">
+      <span>Total TTC</span>
+      <span class="text-indigo-700">{{ "%.2f"|format(total_ttc) }} €</span>
+    </div>
+  </div>
+
+  <!-- Confirm -->
+  <form method="POST" action="/orders/confirm">
+    <button type="submit"
+            class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3.5 rounded-xl transition-colors text-base">
+      Confirmer la commande
+    </button>
+  </form>
+
+  <a href="/cart" class="block text-center text-sm text-gray-500 hover:text-indigo-600 mt-4 transition-colors">
+    ← Retour au panier
+  </a>
+</div>
+{% endblock %}

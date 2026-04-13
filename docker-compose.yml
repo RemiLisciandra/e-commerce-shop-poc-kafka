@@ -1,14 +1,17 @@
 version: "3.8"
 
 services:
-  mariadb_erp:
+  mariadb:
     image: mariadb:10.11
-    container_name: mariadb_erp
+    container_name: mariadb
+    restart: unless-stopped
+    volumes:
+      - mariadb_data:/var/lib/mysql
     environment:
       MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: erp_ecommerce
-      MYSQL_USER: erp_user
-      MYSQL_PASSWORD: erppassword
+      MYSQL_DATABASE: ecommerce
+      MYSQL_USER: ecommerce_user
+      MYSQL_PASSWORD: ecommercepassword
     ports:
       - "3306:3306"
 
@@ -33,18 +36,20 @@ services:
       timeout: 5s
       retries: 5
 
-  api_ecommerce:
+  api:
     build: ./api
-    container_name: api_ecommerce
+    container_name: api
+    restart: unless-stopped
     ports:
       - "8000:8000"
     depends_on:
-      mariadb_erp:
+      mariadb:
         condition: service_healthy
     volumes:
       - ./api:/app
+      - uploads_data:/app/uploads
     environment:
-      - DATABASE_URL=mysql+pymysql://erp_user:erppassword@mariadb_erp:3306/erp_ecommerce
+      - DATABASE_URL=mysql+pymysql://ecommerce_user:ecommercepassword@mariadb:3306/ecommerce
       - SECRET_KEY=change-this-secret-key-in-production-min-32-chars
     command:
       ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
@@ -56,8 +61,12 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      mariadb_erp:
+      mariadb:
         condition: service_healthy
     environment:
-      ADMINER_DEFAULT_SERVER: mariadb_erp
+      ADMINER_DEFAULT_SERVER: mariadb
       ADMINER_DESIGN: pepa-linha
+
+volumes:
+  mariadb_data:
+  uploads_data:

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Boutique{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen flex flex-col">
+
+  <!-- Navbar -->
+  <nav class="bg-white border-b border-gray-200 sticky top-0 z-50">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      <a href="/" class="flex items-center gap-2 font-bold text-indigo-700 text-xl">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"/>
+        </svg>
+        ShopItem
+      </a>
+
+      <div class="flex items-center gap-6">
+        <!-- Cart -->
+        <a href="/cart" class="relative p-2 text-gray-600 hover:text-indigo-600 transition-colors">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/>
+          </svg>
+          {% if cart_count > 0 %}
+          <span class="absolute -top-1 -right-1 w-5 h-5 bg-indigo-600 text-white text-xs rounded-full flex items-center justify-center font-bold">{{ cart_count }}</span>
+          {% endif %}
+        </a>
+
+        <!-- Auth -->
+        {% if customer %}
+        <div class="flex items-center gap-3">
+          <span class="text-sm text-gray-600">Bonjour, <strong>{{ customer.first_name }}</strong></span>
+          <a href="/logout"
+             class="inline-flex items-center gap-1.5 text-sm font-medium text-red-600 hover:bg-red-50 border border-red-200 px-3 py-1.5 rounded-lg transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+            </svg>
+            Déconnexion
+          </a>
+        </div>
+        {% else %}
+        <a href="/login" class="text-sm font-medium text-indigo-600 hover:text-indigo-800 transition-colors">Connexion</a>
+        <a href="/register" class="text-sm font-medium bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition-colors">Créer un compte</a>
+        {% endif %}
+      </div>
+    </div>
+  </nav>
+
+  <!-- Page content -->
+  <main class="flex-1">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="bg-white border-t border-gray-200 py-6 mt-12">
+    <p class="text-center text-sm text-gray-400">© 2026 ShopItem</p>
+  </footer>
+
+</body>
+</html>

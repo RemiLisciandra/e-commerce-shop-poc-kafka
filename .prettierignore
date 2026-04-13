@@ -1,0 +1,2 @@
+# Jinja2 templates — Prettier breaks {% %} blocks inside HTML attributes
+api/templates/**

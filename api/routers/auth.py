@@ -4,18 +4,18 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import User
-from auth.utils import verify_password, create_access_token, get_current_user
+from models import Admin
+from auth.utils import verify_password, create_access_token, get_current_admin
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
 
 
 @router.get("/login", response_class=HTMLResponse)
-def login_page(request: Request, current_user: User = Depends(get_current_user)):
-    if current_user and current_user.is_admin:
+def login_page(request: Request, current_admin: Admin = Depends(get_current_admin)):
+    if current_admin:
         return RedirectResponse(url="/admin/items", status_code=302)
-    return templates.TemplateResponse("login.html", {"request": request})
+    return templates.TemplateResponse("admin/login.html", {"request": request})
 
 
 @router.post("/login")
@@ -25,20 +25,14 @@ def login(
     password: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    user = db.query(User).filter(User.email == email).first()
-    if not user or not verify_password(password, user.hashed_password):
+    admin = db.query(Admin).filter(Admin.email == email).first()
+    if not admin or not verify_password(password, admin.hashed_password):
         return templates.TemplateResponse(
-            "login.html",
+            "admin/login.html",
             {"request": request, "error": "Email ou mot de passe incorrect"},
             status_code=401,
         )
-    if not user.is_admin:
-        return templates.TemplateResponse(
-            "login.html",
-            {"request": request, "error": "Accès réservé aux administrateurs"},
-            status_code=403,
-        )
-    token = create_access_token({"sub": user.email})
+    token = create_access_token({"sub": admin.email})
     redirect = RedirectResponse(url="/admin/items", status_code=302)
     redirect.set_cookie(
         key="access_token",
@@ -52,6 +46,6 @@ def login(
 
 @router.get("/logout")
 def logout():
-    redirect = RedirectResponse(url="/login", status_code=302)
+    redirect = RedirectResponse(url="/admin/login", status_code=302)
     redirect.delete_cookie("access_token")
     return redirect
