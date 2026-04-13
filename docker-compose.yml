@@ -1,0 +1,63 @@
+version: "3.8"
+
+services:
+  mariadb_erp:
+    image: mariadb:10.11
+    container_name: mariadb_erp
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: erp_ecommerce
+      MYSQL_USER: erp_user
+      MYSQL_PASSWORD: erppassword
+    ports:
+      - "3306:3306"
+
+    command:
+      - --server-id=1
+      - --log-bin=mysql-bin
+      - --binlog-format=ROW
+      - --binlog-row-image=FULL
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "localhost",
+          "-u",
+          "root",
+          "-prootpassword",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api_ecommerce:
+    build: ./api
+    container_name: api_ecommerce
+    ports:
+      - "8000:8000"
+    depends_on:
+      mariadb_erp:
+        condition: service_healthy
+    volumes:
+      - ./api:/app
+    environment:
+      - DATABASE_URL=mysql+pymysql://erp_user:erppassword@mariadb_erp:3306/erp_ecommerce
+      - SECRET_KEY=change-this-secret-key-in-production-min-32-chars
+    command:
+      ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  adminer:
+    image: adminer:4.8.1
+    container_name: adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      mariadb_erp:
+        condition: service_healthy
+    environment:
+      ADMINER_DEFAULT_SERVER: mariadb_erp
+      ADMINER_DESIGN: pepa-linha
