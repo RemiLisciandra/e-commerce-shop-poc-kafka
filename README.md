@@ -33,7 +33,7 @@ Les modifications en base MariaDB sont capturées via **Debezium CDC**, transite
 | `kafka`           | `cp-kafka:7.6.0`         | `29092` | Broker de messages                              |
 | `kafka-connect`   | Build `./kafka-connect`  | `8083`  | Debezium (source) + JDBC (sink)                 |
 | `kafka-ui`        | `provectuslabs/kafka-ui` | `8081`  | Interface de monitoring Kafka                   |
-| `postgres-dwh`    | `postgres:16`            | `5432`  | Data Warehouse analytique                       |
+| `postgres-dwh`    | `postgres:16`            | `5433`  | Data Warehouse analytique                       |
 | `dbt`             | Build `./dbt`            | —       | Transformations SQL (exécution manuelle)        |
 | `mariadb-setup`   | `mariadb:10.11`          | —       | Création de l'utilisateur Debezium (one-shot)   |
 | `connector-setup` | `alpine/curl`            | —       | Enregistrement des connecteurs Kafka (one-shot) |
@@ -152,6 +152,40 @@ docker compose --profile dbt run --rm dbt dbt run --select marts.*
 # Debug de la connexion
 docker compose --profile dbt run --rm dbt dbt debug
 ```
+
+---
+
+## Tests
+
+L'API dispose d'une suite de **150 tests** avec **100 % de couverture** de code.
+
+### Installer les dépendances de test
+
+```bash
+cd api
+pip install -r requirements.txt
+```
+
+### Lancer les tests
+
+```bash
+python -m pytest tests/ -v
+```
+
+### Lancer les tests avec couverture
+
+```bash
+python -m pytest tests/ --cov=. --cov-config=.coveragerc --cov-report=term-missing
+```
+
+### Générer un rapport HTML de couverture
+
+```bash
+python -m pytest tests/ --cov=. --cov-config=.coveragerc --cov-report=html
+open htmlcov/index.html
+```
+
+> Les tests utilisent une base SQLite in-memory et ne nécessitent ni Docker ni MariaDB.
 
 ---
 

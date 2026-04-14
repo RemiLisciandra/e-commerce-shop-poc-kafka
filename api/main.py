@@ -11,7 +11,7 @@ from routers import auth
 from routers.admin import router as admin_router
 from routers.shop import shop_router
 
-UPLOADS_DIR = "/app/uploads"
+UPLOADS_DIR = os.getenv("UPLOADS_DIR", "/app/uploads")
 
 
 def _create_tables():

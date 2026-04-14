@@ -1,0 +1,90 @@
+{% extends "shop/base.html" %}
+{% block title %}Mon profil — ShopItem{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-10">
+
+  <!-- Account nav -->
+  <div class="flex gap-1 mb-8 bg-gray-100 rounded-lg p-1 w-fit">
+    <a href="/account" class="px-4 py-2 text-sm font-medium rounded-md text-gray-600 hover:text-indigo-600 transition-colors">Commandes</a>
+    <a href="/account/payments" class="px-4 py-2 text-sm font-medium rounded-md text-gray-600 hover:text-indigo-600 transition-colors">Paiements</a>
+    <a href="/account/invoices" class="px-4 py-2 text-sm font-medium rounded-md text-gray-600 hover:text-indigo-600 transition-colors">Factures</a>
+    <a href="/account/profile" class="px-4 py-2 text-sm font-medium rounded-md bg-white shadow text-indigo-700">Profil</a>
+  </div>
+
+  <h1 class="text-2xl font-bold text-gray-800 mb-6">Mon profil</h1>
+
+  {% if saved %}
+  <div class="flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg px-4 py-3 mb-6">
+    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+    </svg>
+    Vos informations ont été mises à jour.
+  </div>
+  {% endif %}
+
+  <form method="POST" action="/account/profile"
+        class="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100 max-w-xl">
+
+    <!-- Identity -->
+    <div class="px-6 py-5">
+      <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">Identité</h2>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label for="first_name" class="block text-sm font-medium text-gray-700 mb-1">
+            Prénom <span class="text-red-500">*</span>
+          </label>
+          <input id="first_name" name="first_name" type="text" required
+                 value="{{ customer.first_name }}"
+                 class="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"/>
+        </div>
+        <div>
+          <label for="last_name" class="block text-sm font-medium text-gray-700 mb-1">
+            Nom <span class="text-red-500">*</span>
+          </label>
+          <input id="last_name" name="last_name" type="text" required
+                 value="{{ customer.last_name }}"
+                 class="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"/>
+        </div>
+      </div>
+      <div class="mt-4">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+        <div class="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm bg-gray-50 text-gray-500">
+          {{ customer.email }}
+        </div>
+        <p class="mt-1 text-xs text-gray-400">L'adresse e-mail ne peut pas être modifiée.</p>
+      </div>
+    </div>
+
+    <!-- Contact & address -->
+    <div class="px-6 py-5">
+      <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-4">Contact &amp; livraison</h2>
+      <div class="space-y-4">
+        <div>
+          <label for="phone" class="block text-sm font-medium text-gray-700 mb-1">Téléphone</label>
+          <input id="phone" name="phone" type="tel"
+                 value="{{ customer.phone or '' }}"
+                 placeholder="+33 6 00 00 00 00"
+                 class="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"/>
+        </div>
+        <div>
+          <label for="address" class="block text-sm font-medium text-gray-700 mb-1">Adresse de livraison</label>
+          <textarea id="address" name="address" rows="3"
+                    placeholder="12 rue de la Paix, 75001 Paris"
+                    class="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition resize-none">{{ customer.address or '' }}</textarea>
+          <p class="mt-1 text-xs text-gray-400">Utilisée pour vos factures et récapitulatifs de commande.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="px-6 py-4 flex justify-end">
+      <button type="submit"
+              class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors">
+        Enregistrer
+      </button>
+    </div>
+  </form>
+
+</div>
+{% endblock %}

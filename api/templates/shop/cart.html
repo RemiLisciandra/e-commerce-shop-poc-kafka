@@ -27,12 +27,17 @@
           <p class="text-sm text-gray-500 mt-0.5">{{ "%.2f"|format(ci.item.price_ttc) }} € / unité</p>
         </div>
 
-        <!-- Quantity update form -->
-        <form method="POST" action="/cart/update" class="flex items-center gap-2">
+        <!-- Quantity stepper -->
+        <form method="POST" action="/cart/update" id="form-qty-{{ ci.item.id }}" class="flex items-center gap-1">
           <input type="hidden" name="item_id" value="{{ ci.item.id }}" />
-          <input type="number" name="quantity" value="{{ ci.quantity }}" min="1" max="{{ ci.item.quantity }}"
-                 class="w-16 px-2 py-1.5 border border-gray-300 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-400"/>
-          <button type="submit" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium">Modifier</button>
+          <input type="hidden" name="quantity" id="qty-{{ ci.item.id }}" value="{{ ci.quantity }}" />
+          <button type="button"
+                  onclick="stepQty('{{ ci.item.id }}', -1, 1, {{ ci.item.quantity }})"
+                  class="w-8 h-8 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100 font-bold text-base flex items-center justify-center transition-colors">−</button>
+          <span id="qty-display-{{ ci.item.id }}" class="w-8 text-center text-sm font-semibold text-gray-800 select-none">{{ ci.quantity }}</span>
+          <button type="button"
+                  onclick="stepQty('{{ ci.item.id }}', +1, 1, {{ ci.item.quantity }})"
+                  class="w-8 h-8 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100 font-bold text-base flex items-center justify-center transition-colors">+</button>
         </form>
 
         <p class="text-base font-bold text-indigo-700 w-20 text-right">{{ "%.2f"|format(ci.subtotal_ttc) }} €</p>
@@ -90,4 +95,16 @@
   </div>
   {% endif %}
 </div>
+
+<script>
+function stepQty(id, delta, min, max) {
+  const input = document.getElementById('qty-' + id);
+  const display = document.getElementById('qty-display-' + id);
+  let val = parseInt(input.value) + delta;
+  val = Math.max(min, Math.min(max, val));
+  input.value = val;
+  display.textContent = val;
+  document.getElementById('form-qty-' + id).submit();
+}
+</script>
 {% endblock %}

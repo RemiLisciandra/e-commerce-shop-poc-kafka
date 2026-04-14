@@ -148,7 +148,7 @@ def confirm_order(
     order.status = "confirmed"
     db.commit()
 
-    response = RedirectResponse(url=f"/orders/{order.id}/confirmation", status_code=302)
+    response = RedirectResponse(url=f"/checkout/{order.id}/confirmation", status_code=302)
     response.delete_cookie("cart")
     return response
 

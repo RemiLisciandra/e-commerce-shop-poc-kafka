@@ -1,7 +1,7 @@
 import io
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fpdf import FPDF
@@ -221,3 +221,49 @@ def download_invoice_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{invoice.invoice_number}.pdf"'},
     )
+
+
+# ── Profile edit ─────────────────────────────────────────────────────────────
+
+@router.get("/profile", response_class=HTMLResponse)
+def account_profile(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_customer: Optional[Customer] = Depends(get_current_customer),
+):
+    guard = _require_customer(current_customer)
+    if guard:
+        return guard
+
+    return templates.TemplateResponse(
+        "shop/account/profile.html",
+        {
+            "request": request,
+            "customer": current_customer,
+            "cart_count": _cart_count(request),
+            "saved": request.query_params.get("saved") == "1",
+        },
+    )
+
+
+@router.post("/profile")
+def account_profile_save(
+    request: Request,
+    first_name: str = Form(...),
+    last_name: str = Form(...),
+    phone: str = Form(""),
+    address: str = Form(""),
+    db: Session = Depends(get_db),
+    current_customer: Optional[Customer] = Depends(get_current_customer),
+):
+    guard = _require_customer(current_customer)
+    if guard:
+        return guard
+
+    current_customer.first_name = first_name.strip()
+    current_customer.last_name = last_name.strip()
+    current_customer.phone = phone.strip() or None
+    current_customer.address = address.strip() or None
+    db.commit()
+
+    return RedirectResponse(url="/account/profile?saved=1", status_code=303)
