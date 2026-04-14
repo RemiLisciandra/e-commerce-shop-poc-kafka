@@ -33,6 +33,11 @@ postgres_data/
 .coverage
 htmlcov/
 
+# dbt
+dbt/target/
+dbt/logs/
+dbt/.user.yml
+
 # OS
 .DS_Store
 Thumbs.db

@@ -14,10 +14,10 @@ cleaned as (
         tva_rate::numeric(5, 2)                     as tva_rate,
         price_ttc::numeric(10, 2)                   as price_ttc,
         quantity::integer                           as quantity,
-        coalesce("__deleted", false)                as is_deleted,
+        coalesce("__deleted", 'false') = 'true'      as is_deleted,
         to_timestamp("__source_ts_ms" / 1000.0)    as source_updated_at
     from source
-    where coalesce("__deleted", false) = false
+    where coalesce("__deleted", 'false') = 'false'
 )
 
 select * from cleaned

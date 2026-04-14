@@ -10,10 +10,10 @@ cleaned as (
         status                                      as payment_status,
         payment_method,
         transaction_id,
-        coalesce("__deleted", false)                as is_deleted,
+        coalesce("__deleted", 'false') = 'true'      as is_deleted,
         to_timestamp("__source_ts_ms" / 1000.0)    as source_updated_at
     from source
-    where coalesce("__deleted", false) = false
+    where coalesce("__deleted", 'false') = 'false'
 )
 
 select * from cleaned
