@@ -67,6 +67,159 @@ services:
       ADMINER_DEFAULT_SERVER: mariadb
       ADMINER_DESIGN: pepa-linha
 
+  # ── Debezium user setup (idempotent, runs on every start) ─────────────────
+  mariadb-setup:
+    image: mariadb:10.11
+    container_name: mariadb-setup
+    restart: "no"
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    environment:
+      MYSQL_PWD: rootpassword
+    command: >
+      sh -c "mysql -h mariadb -u root -e \"
+        CREATE USER IF NOT EXISTS 'debezium'@'%' IDENTIFIED BY 'debeziumpassword';
+        GRANT SELECT, RELOAD, SHOW DATABASES, REPLICATION SLAVE, REPLICATION CLIENT, LOCK TABLES ON *.* TO 'debezium'@'%';
+        FLUSH PRIVILEGES;
+      \""
+
+  # ── Kafka stack ────────────────────────────────────────────────────────────
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    container_name: zookeeper
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_log:/var/lib/zookeeper/log
+
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: kafka
+    restart: unless-stopped
+    depends_on:
+      - zookeeper
+    ports:
+      - "29092:29092" # host access (e.g. Kafka UI / local tools)
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_LOG_RETENTION_HOURS: 168
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+
+  # ── Kafka Connect (Debezium source + JDBC sink) ────────────────────────────
+  kafka-connect:
+    build: ./kafka-connect
+    container_name: kafka-connect
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    ports:
+      - "8083:8083"
+    environment:
+      CONNECT_BOOTSTRAP_SERVERS: kafka:9092
+      CONNECT_REST_PORT: 8083
+      CONNECT_GROUP_ID: ecommerce-connect-group
+      CONNECT_CONFIG_STORAGE_TOPIC: _connect-configs
+      CONNECT_OFFSET_STORAGE_TOPIC: _connect-offsets
+      CONNECT_STATUS_STORAGE_TOPIC: _connect-status
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "true"
+      CONNECT_PLUGIN_PATH: /usr/share/java,/usr/share/confluent-hub-components
+      CONNECT_REST_ADVERTISED_HOST_NAME: kafka-connect
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8083/connectors || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+
+  # ── Auto-register connectors once Kafka Connect is healthy ─────────────────
+  connector-setup:
+    image: alpine/curl:latest
+    container_name: connector-setup
+    restart: "no"
+    depends_on:
+      kafka-connect:
+        condition: service_healthy
+    volumes:
+      - ./kafka-connect/connectors:/connectors:ro
+    command: ["/bin/sh", "/connectors/register.sh"]
+
+  # ── Kafka UI ───────────────────────────────────────────────────────────────
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    depends_on:
+      - kafka
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_NAME: ecommerce-connect
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_ADDRESS: http://kafka-connect:8083
+
+  # ── PostgreSQL Data Warehouse ──────────────────────────────────────────────
+  postgres-dwh:
+    image: postgres:16
+    container_name: postgres-dwh
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ecommerce_dwh
+      POSTGRES_USER: dwh_user
+      POSTGRES_PASSWORD: dwhpassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_dwh_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dwh_user -d ecommerce_dwh"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── dbt (manuel) ────────────────────────────────────────────────────────────
+  # Usage : docker compose --profile dbt run --rm dbt dbt run
+  #         docker compose --profile dbt run --rm dbt dbt test
+  dbt:
+    build: ./dbt
+    container_name: dbt
+    profiles: ["dbt"]
+    depends_on:
+      postgres-dwh:
+        condition: service_healthy
+    volumes:
+      - ./dbt:/dbt
+    environment:
+      DBT_POSTGRES_HOST: postgres-dwh
+      DBT_POSTGRES_USER: dwh_user
+      DBT_POSTGRES_PASSWORD: dwhpassword
+      DBT_POSTGRES_DB: ecommerce_dwh
+
 volumes:
   mariadb_data:
   uploads_data:
+  zookeeper_data:
+  zookeeper_log:
+  kafka_data:
+  postgres_dwh_data:

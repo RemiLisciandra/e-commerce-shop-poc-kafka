@@ -9,3 +9,4 @@ passlib[bcrypt]==1.7.4
 bcrypt==3.2.2
 pydantic[email]==2.5.0
 aiofiles==23.2.1
+fpdf2==2.7.9

@@ -1,0 +1,29 @@
+{
+  "name": "mariadb-ecommerce-source",
+  "config": {
+    "connector.class": "io.debezium.connector.mysql.MySqlConnector",
+    "database.hostname": "mariadb",
+    "database.port": "3306",
+    "database.user": "debezium",
+    "database.password": "debeziumpassword",
+    "database.server.id": "2",
+    "topic.prefix": "ecommerce",
+    "database.include.list": "ecommerce",
+    "table.include.list": "ecommerce.admins,ecommerce.items,ecommerce.customers,ecommerce.orders,ecommerce.order_items,ecommerce.payments,ecommerce.invoices",
+    "schema.history.internal.kafka.bootstrap.servers": "kafka:9092",
+    "schema.history.internal.kafka.topic": "schema-changes.ecommerce",
+    "snapshot.mode": "initial",
+    "snapshot.locking.mode": "minimal",
+    "database.ssl.mode": "disabled",
+    "include.schema.changes": "true",
+    "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "key.converter.schemas.enable": "false",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter.schemas.enable": "true",
+    "transforms": "unwrap",
+    "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+    "transforms.unwrap.drop.tombstones": "true",
+    "transforms.unwrap.delete.handling.mode": "rewrite",
+    "transforms.unwrap.add.fields": "op,ts_ms,source.ts_ms"
+  }
+}

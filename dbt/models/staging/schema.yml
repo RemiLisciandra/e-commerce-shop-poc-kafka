@@ -1,0 +1,54 @@
+version: 2
+
+models:
+  - name: stg_admins
+    description: "Comptes administrateurs (source : MariaDB via Debezium CDC)"
+    columns:
+      - name: admin_id
+        description: "Clé primaire"
+        tests: [unique, not_null]
+      - name: email
+        tests: [unique, not_null]
+
+  - name: stg_items
+    description: "Articles du catalogue (source : MariaDB via Debezium CDC)"
+    columns:
+      - name: item_id
+        description: "Clé primaire"
+        tests: [unique, not_null]
+      - name: title
+        tests: [not_null]
+
+  - name: stg_customers
+    description: "Comptes clients"
+    columns:
+      - name: customer_id
+        tests: [unique, not_null]
+      - name: email
+        tests: [unique, not_null]
+
+  - name: stg_orders
+    description: "Commandes"
+    columns:
+      - name: order_id
+        tests: [unique, not_null]
+
+  - name: stg_order_items
+    description: "Lignes de commande"
+    columns:
+      - name: order_item_id
+        tests: [unique, not_null]
+
+  - name: stg_payments
+    description: "Paiements (source : MariaDB via Debezium CDC)"
+    columns:
+      - name: payment_id
+        description: "Clé primaire"
+        tests: [unique, not_null]
+
+  - name: stg_invoices
+    description: "Factures (source : MariaDB via Debezium CDC)"
+    columns:
+      - name: invoice_id
+        description: "Clé primaire"
+        tests: [unique, not_null]

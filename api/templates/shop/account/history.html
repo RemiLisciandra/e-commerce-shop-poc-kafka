@@ -1,0 +1,70 @@
+{% extends "shop/base.html" %}
+{% block title %}Mes commandes — ShopItem{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-10">
+
+  <!-- Account nav -->
+  <div class="flex gap-1 mb-8 bg-gray-100 rounded-lg p-1 w-fit">
+    <a href="/account" class="px-4 py-2 text-sm font-medium rounded-md bg-white shadow text-indigo-700">Commandes</a>
+    <a href="/account/payments" class="px-4 py-2 text-sm font-medium rounded-md text-gray-600 hover:text-indigo-600 transition-colors">Paiements</a>
+    <a href="/account/invoices" class="px-4 py-2 text-sm font-medium rounded-md text-gray-600 hover:text-indigo-600 transition-colors">Factures</a>
+  </div>
+
+  <h1 class="text-2xl font-bold text-gray-800 mb-6">Historique de commandes</h1>
+
+  {% if orders %}
+  <div class="space-y-4">
+    {% for order in orders %}
+    <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div class="px-5 py-4 flex items-center justify-between bg-gray-50 border-b border-gray-100">
+        <div class="flex items-center gap-4">
+          <span class="text-sm font-semibold text-gray-900">Commande #{{ order.id }}</span>
+          <span class="text-xs px-2 py-0.5 rounded-full font-medium
+            {% if order.status.value == 'confirmed' %}bg-green-100 text-green-700
+            {% elif order.status.value == 'pending' %}bg-yellow-100 text-yellow-700
+            {% elif order.status.value == 'shipped' %}bg-blue-100 text-blue-700
+            {% elif order.status.value == 'delivered' %}bg-indigo-100 text-indigo-700
+            {% else %}bg-gray-100 text-gray-600{% endif %}">
+            {{ order.status.value | capitalize }}
+          </span>
+        </div>
+        <div class="text-right">
+          <p class="text-sm font-bold text-indigo-700">{{ "%.2f"|format(order.total_ttc) }} €</p>
+          <p class="text-xs text-gray-400">{{ order.created_at.strftime('%d/%m/%Y %H:%M') if order.created_at else '' }}</p>
+        </div>
+      </div>
+      <div class="divide-y divide-gray-100">
+        {% for oi in order.items %}
+        <div class="flex items-center gap-4 px-5 py-3">
+          {% if oi.item and oi.item.image_url %}
+          <img src="{{ oi.item.image_url }}" alt="{{ oi.item.title }}" class="w-10 h-10 rounded object-cover bg-gray-100"/>
+          {% else %}
+          <div class="w-10 h-10 rounded bg-indigo-50 flex items-center justify-center">
+            <svg class="w-5 h-5 text-indigo-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10"/>
+            </svg>
+          </div>
+          {% endif %}
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-medium text-gray-900 truncate">{{ oi.item.title if oi.item else 'Article supprimé' }}</p>
+            <p class="text-xs text-gray-400">{{ oi.quantity }} × {{ "%.2f"|format(oi.unit_price_ttc) }} €</p>
+          </div>
+          <p class="text-sm font-semibold text-gray-700">{{ "%.2f"|format(oi.unit_price_ttc * oi.quantity) }} €</p>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="text-center py-20">
+    <svg class="mx-auto w-12 h-12 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+    </svg>
+    <p class="text-gray-400">Aucune commande pour le moment.</p>
+    <a href="/" class="text-indigo-600 hover:underline text-sm mt-2 inline-block">Découvrir nos articles</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

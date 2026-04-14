@@ -1,0 +1,35 @@
+version: 2
+
+models:
+  - name: mart_sales_daily
+    description: "Chiffre d'affaires agrégé par jour"
+    columns:
+      - name: order_date
+        tests: [unique, not_null]
+
+  - name: mart_revenue_by_item
+    description: "Revenus cumulés par article"
+    columns:
+      - name: item_id
+        tests: [unique, not_null]
+
+  - name: mart_customer_lifetime
+    description: "Valeur cumulée (LTV) par client"
+    columns:
+      - name: customer_id
+        tests: [unique, not_null]
+
+  - name: mart_payments
+    description: "Paiements enrichis avec infos client et commande"
+    columns:
+      - name: payment_id
+        tests: [unique, not_null]
+
+  - name: mart_invoices
+    description: "Factures enrichies avec infos client et statut d'échéance"
+    columns:
+      - name: invoice_id
+        tests: [unique, not_null]
+
+  - name: mart_customer_reorders
+    description: "Produits achetés par client pour les suggestions de réachat"

@@ -1,0 +1,24 @@
+{
+  "name": "postgres-ecommerce-sink",
+  "config": {
+    "connector.class": "io.confluent.connect.jdbc.JdbcSinkConnector",
+    "connection.url": "jdbc:postgresql://postgres-dwh:5432/ecommerce_dwh",
+    "connection.user": "dwh_user",
+    "connection.password": "dwhpassword",
+    "topics.regex": "ecommerce\\.ecommerce\\.(.*)",
+    "auto.create": "true",
+    "auto.evolve": "true",
+    "insert.mode": "upsert",
+    "pk.mode": "record_value",
+    "pk.fields": "id",
+    "delete.enabled": "false",
+    "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "key.converter.schemas.enable": "false",
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter.schemas.enable": "true",
+    "transforms": "route",
+    "transforms.route.type": "org.apache.kafka.connect.transforms.RegexRouter",
+    "transforms.route.regex": "ecommerce\\.ecommerce\\.(.*)",
+    "transforms.route.replacement": "$1"
+  }
+}

@@ -1,4 +1,7 @@
 import json
+import random
+import uuid
+from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Request
@@ -8,7 +11,8 @@ from sqlalchemy.orm import Session
 
 from auth.utils import get_current_customer
 from database import get_db
-from models import Item, Customer, Order, OrderItem
+from models import Item, Customer, Order, OrderItem, Payment, Invoice
+from models.payment import PaymentStatus, PaymentMethod
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
@@ -114,6 +118,34 @@ def confirm_order(
             unit_price_ttc=item.price_ttc,
         ))
 
+    # ── Fake payment ──────────────────────────────────────────────────────────
+    method = random.choice(list(PaymentMethod))
+    payment = Payment(
+        order_id=order.id,
+        amount=order.total_ttc,
+        status=PaymentStatus.COMPLETED,
+        payment_method=method,
+        transaction_id=f"TXN-{uuid.uuid4().hex[:12].upper()}",
+    )
+    db.add(payment)
+
+    # ── Invoice ───────────────────────────────────────────────────────────────
+    now = datetime.utcnow()
+    invoice_number = f"INV-{now.strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
+    total_tva = round(order.total_ttc - order.total_ht, 2)
+    invoice = Invoice(
+        order_id=order.id,
+        invoice_number=invoice_number,
+        issued_at=now,
+        due_date=now + timedelta(days=30),
+        total_ht=order.total_ht,
+        total_tva=total_tva,
+        total_ttc=order.total_ttc,
+    )
+    db.add(invoice)
+
+    # ── Mark order confirmed ──────────────────────────────────────────────────
+    order.status = "confirmed"
     db.commit()
 
     response = RedirectResponse(url=f"/orders/{order.id}/confirmation", status_code=302)
