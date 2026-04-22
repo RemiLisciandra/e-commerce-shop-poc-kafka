@@ -2,7 +2,7 @@
   "name": "postgres-ecommerce-sink",
   "config": {
     "connector.class": "io.confluent.connect.jdbc.JdbcSinkConnector",
-    "connection.url": "jdbc:postgresql://postgres-dwh:5432/ecommerce_dwh",
+    "connection.url": "jdbc:postgresql://postgres-dwh:5432/ecommerce_dwh?currentSchema=staging",
     "connection.user": "dwh_user",
     "connection.password": "dwhpassword",
     "topics.regex": "ecommerce\\.ecommerce\\.(.*)",

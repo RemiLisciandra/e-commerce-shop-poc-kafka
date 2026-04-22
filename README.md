@@ -1,23 +1,23 @@
-# ShopItem — E-commerce + Data Pipeline (Debezium / Kafka / dbt)
+# ShopItem — E-commerce + Data Pipeline (Debezium / Kafka / Airflow)
 
 Application e-commerce complète avec pipeline de données temps réel.  
-Les modifications en base MariaDB sont capturées via **Debezium CDC**, transitent par **Kafka**, sont répliquées dans un **Data Warehouse PostgreSQL**, puis transformées par **dbt** en modèles analytiques.
+Les modifications en base MariaDB sont capturées via **Debezium CDC**, transitent par **Kafka**, sont répliquées dans **PostgreSQL** (schéma `staging`), puis transformées par **Apache Airflow** en couches DWH (`dwh.*`) et Data Mart analytiques (`dmart.*`).
 
 ---
 
 ## Architecture
 
 ```
-┌──────────────┐      binlogs       ┌──────────────┐       topics       ┌──────────────┐
-│   MariaDB    │ ──────────────────▶ │    Kafka      │ ──────────────────▶ │ PostgreSQL   │
-│  (OLTP)      │     Debezium CDC    │   (Broker)    │    JDBC Sink       │   (DWH)      │
-└──────────────┘                     └──────────────┘                     └──────┬───────┘
-       ▲                                                                        │
-       │                                                                   dbt run
-┌──────┴───────┐                                                        ┌───────▼───────┐
-│   FastAPI    │                                                        │  Staging      │
-│   (Shop)     │                                                        │  + Marts      │
-└──────────────┘                                                        └───────────────┘
+┌──────────────┐      binlogs       ┌──────────────┐       topics       ┌──────────────────┐
+│   MariaDB    │ ──────────────────▶ │    Kafka      │ ──────────────────▶ │    PostgreSQL    │
+│  (OLTP)      │     Debezium CDC    │   (Broker)    │    JDBC Sink       │ schema: staging  │
+└──────────────┘                     └──────────────┘                     └────────┬─────────┘
+       ▲                                                                           │
+       │                                                              Airflow DAG (*/15 min)
+┌──────┴───────┐                                                   ┌───────────────▼─────────────┐
+│   FastAPI    │                                                   │  dwh.stg_*   (7 tables)     │
+│   (Shop)     │                                                   │  dmart.mart_* (6 tables)    │
+└──────────────┘                                                   └─────────────────────────────┘
 ```
 
 ---
@@ -33,17 +33,20 @@ Les modifications en base MariaDB sont capturées via **Debezium CDC**, transite
 | `kafka`           | `cp-kafka:7.6.0`         | `29092` | Broker de messages                              |
 | `kafka-connect`   | Build `./kafka-connect`  | `8083`  | Debezium (source) + JDBC (sink)                 |
 | `kafka-ui`        | `provectuslabs/kafka-ui` | `8081`  | Interface de monitoring Kafka                   |
-| `postgres-dwh`    | `postgres:16`            | `5433`  | Data Warehouse analytique                       |
-| `dbt`             | Build `./dbt`            | —       | Transformations SQL (exécution manuelle)        |
-| `mariadb-setup`   | `mariadb:10.11`          | —       | Création de l'utilisateur Debezium (one-shot)   |
-| `connector-setup` | `alpine/curl`            | —       | Enregistrement des connecteurs Kafka (one-shot) |
+| `postgres-dwh`      | `postgres:16`            | `5433`  | PostgreSQL DWH (schémas `staging` / `dwh` / `dmart`)          |
+| `postgres-airflow`  | `postgres:16`            | `5434`  | Base de métadonnées Airflow                                   |
+| `airflow-webserver` | `apache/airflow:2.9.2`   | `8082`  | Interface Web Airflow (DAGs, logs, statuts)                   |
+| `airflow-scheduler` | `apache/airflow:2.9.2`   | —       | Planificateur Airflow (exécute les DAGs)                      |
+| `airflow-init`      | `apache/airflow:2.9.2`   | —       | Initialisation Airflow (migrate DB + créer admin) (one-shot)  |
+| `mariadb-setup`     | `mariadb:10.11`          | —       | Création de l'utilisateur Debezium (one-shot)                 |
+| `connector-setup`   | `alpine/curl`            | —       | Enregistrement des connecteurs Kafka (one-shot)               |
 
 ---
 
 ## Prérequis
 
 - **Docker** et **Docker Compose** installés
-- Ports `3306`, `5432`, `8000`, `8080`, `8081`, `8083`, `29092` disponibles
+- Ports `3306`, `5433`, `5434`, `8000`, `8080`, `8081`, `8082`, `8083`, `29092` disponibles
 
 ---
 
@@ -126,31 +129,42 @@ docker compose restart connector-setup
 
 ---
 
-## Commandes dbt
+## Commandes Airflow
 
-dbt est configuré avec un profil Docker dédié. Il ne se lance pas automatiquement.
+Airflow tourne en continu avec un schedule `*/15 * * * *`. Le DAG peut aussi être déclenché manuellement.
+
+### Accéder à l'interface Web
+
+`http://localhost:8082` — identifiants : `admin` / `admin`
+
+### Déclencher le DAG manuellement
 
 ```bash
-# Exécuter les transformations (staging + marts)
-docker compose --profile dbt run --rm dbt dbt run
+# Via l'UI : bouton "Trigger DAG" sur le DAG ecommerce_transformations
 
-# Lancer les tests de qualité
-docker compose --profile dbt run --rm dbt dbt test
+# Via CLI :
+docker compose exec airflow-scheduler airflow dags trigger ecommerce_transformations
+```
 
-# Voir la documentation
-docker compose --profile dbt run --rm dbt dbt docs generate
+### Voir les logs d'exécution
 
-# Exécuter un modèle spécifique
-docker compose --profile dbt run --rm dbt dbt run --select mart_sales_daily
+```bash
+docker compose logs -f airflow-scheduler
+docker compose logs -f airflow-webserver
+```
 
-# Exécuter uniquement le staging
-docker compose --profile dbt run --rm dbt dbt run --select staging.*
+### Vérifier l'état du DAG
 
-# Exécuter uniquement les marts
-docker compose --profile dbt run --rm dbt dbt run --select marts.*
+```bash
+docker compose exec airflow-scheduler airflow dags list
+docker compose exec airflow-scheduler airflow tasks list ecommerce_transformations
+```
 
-# Debug de la connexion
-docker compose --profile dbt run --rm dbt dbt debug
+### Mettre le DAG en pause / reprendre
+
+```bash
+docker compose exec airflow-scheduler airflow dags pause ecommerce_transformations
+docker compose exec airflow-scheduler airflow dags unpause ecommerce_transformations
 ```
 
 ---
@@ -198,6 +212,7 @@ open htmlcov/index.html
 | **Adminer** (BDD)      | http://localhost:8080             | Serveur : `mariadb` · Utilisateur : `ecommerce_user` · Mot de passe : `ecommercepassword` · Base : `ecommerce` |
 | **Kafka UI**           | http://localhost:8081             | —                                                                                                              |
 | **Kafka Connect REST** | http://localhost:8083             | —                                                                                                              |
+| **Airflow**            | http://localhost:8082             | `admin` / `admin`                                                                                              |
 
 ### Identifiants complets (POC)
 
@@ -208,6 +223,8 @@ open htmlcov/index.html
 | **MariaDB (root)**     | `mariadb:3306`                    | `root`              | `rootpassword`                         | `ecommerce`     |
 | **MariaDB (Debezium)** | `mariadb:3306`                    | `debezium`          | `debeziumpassword`                     | `ecommerce`     |
 | **PostgreSQL DWH**     | `postgres-dwh:5432`               | `dwh_user`          | `dwhpassword`                          | `ecommerce_dwh` |
+| **PostgreSQL Airflow** | `localhost:5434`                  | `airflow`           | `airflow`                              | `airflow`       |
+| **Airflow UI**         | http://localhost:8082             | `admin`             | `admin`                                | —               |
 | **Adminer**            | http://localhost:8080             | Serveur : `mariadb` | `ecommerce_user` / `ecommercepassword` | `ecommerce`     |
 
 > **Note** : pour se connecter au PostgreSQL DWH depuis Adminer, choisir le système **PostgreSQL**, serveur `postgres-dwh`, utilisateur `dwh_user`, mot de passe `dwhpassword`, base `ecommerce_dwh`.
@@ -275,45 +292,58 @@ Chaque table correspond à un topic Kafka :
 
 ### 3. Ingestion (JDBC Sink)
 
-Le connecteur JDBC sink réplique les données vers **PostgreSQL** :
+Le connecteur JDBC sink réplique les données vers **PostgreSQL** dans le schéma `staging` :
 
+- Schéma cible : `staging` (tables brutes avec métadonnées Debezium `__deleted`, `__source_ts_ms`)
 - Mode : `upsert` sur la colonne `id` (gère les créations et modifications)
 - Auto-création des tables (`auto.create: true`)
 - Auto-évolution du schéma (`auto.evolve: true`)
 
-### 4. Transformation (dbt)
+### 4. Transformation (Apache Airflow)
 
-#### Staging (vues SQL)
+Le DAG `ecommerce_transformations` (schedule `*/15 * * * *`) exécute les transformations en deux couches successives.
 
-Nettoyage et typage des tables brutes. Filtrage des lignes supprimées (`__deleted = false`).
+#### Couche DWH — tables nettoyées (`dwh.stg_*`)
 
-| Modèle            | Description                                                     |
-| ----------------- | --------------------------------------------------------------- |
-| `stg_admins`      | Comptes admin (id, email, nom, prénom, statut)                  |
-| `stg_customers`   | Comptes clients (id, email, nom, prénom, téléphone, adresse)    |
-| `stg_items`       | Articles (id, titre, prix HT/TTC, TVA, stock)                   |
-| `stg_orders`      | Commandes (id, client, statut, totaux HT/TTC)                   |
-| `stg_order_items` | Lignes de commande + calcul `line_total_ht` / `line_total_ttc`  |
-| `stg_payments`    | Paiements (id, commande, montant, méthode, statut, transaction) |
-| `stg_invoices`    | Factures (id, numéro, commande, montants, dates)                |
+Nettoyage et typage des tables brutes du schéma `staging`. Filtrage des lignes supprimées (`__deleted = false`).
 
-#### Marts (tables matérialisées)
+| Table                   | Description                                                     |
+| ----------------------- | --------------------------------------------------------------- |
+| `dwh.stg_admins`        | Comptes admin (id, email, nom, prénom, statut)                  |
+| `dwh.stg_customers`     | Comptes clients (id, email, nom, prénom, téléphone, adresse)    |
+| `dwh.stg_items`         | Articles (id, titre, prix HT/TTC, TVA, stock)                   |
+| `dwh.stg_orders`        | Commandes (id, client, statut, totaux HT/TTC)                   |
+| `dwh.stg_order_items`   | Lignes de commande + calcul `line_total_ht` / `line_total_ttc`  |
+| `dwh.stg_payments`      | Paiements (id, commande, montant, méthode, statut, transaction) |
+| `dwh.stg_invoices`      | Factures (id, numéro, commande, montants, dates)                |
 
-Modèles analytiques prêts pour la BI.
+#### Couche DMART — tables analytiques (`dmart.mart_*`)
 
-| Modèle                   | Description                                                                              | Clé                       |
-| ------------------------ | ---------------------------------------------------------------------------------------- | ------------------------- |
-| `mart_sales_daily`       | CA HT/TTC par jour, nombre de commandes, unités vendues, cumul glissant                  | `order_date`              |
-| `mart_revenue_by_item`   | Revenus et quantités vendues par article, stock actuel                                   | `item_id`                 |
-| `mart_customer_lifetime` | LTV client, panier moyen, segmentation (`no_order` / `one_time` / `recurring` / `loyal`) | `customer_id`             |
-| `mart_customer_reorders` | Produits achetés par client : quantité totale, nombre de commandes, dernier achat        | `customer_id` + `item_id` |
-| `mart_payments`          | Paiements enrichis avec infos client et commande                                         | `payment_id`              |
-| `mart_invoices`          | Factures enrichies avec statut d'échéance (`overdue` / `on_time`)                        | `invoice_id`              |
+Tables matérialisées prêtes pour la BI, reconstruites à chaque run Airflow.
 
-#### Tests dbt
+| Table                          | Description                                                                              | Clé                       |
+| ------------------------------ | ---------------------------------------------------------------------------------------- | ------------------------- |
+| `dmart.mart_sales_daily`       | CA HT/TTC par jour, nombre de commandes, unités vendues, cumul glissant                  | `order_date`              |
+| `dmart.mart_revenue_by_item`   | Revenus et quantités vendues par article, stock actuel                                   | `item_id`                 |
+| `dmart.mart_customer_lifetime` | LTV client, panier moyen, segmentation (`no_order` / `one_time` / `recurring` / `loyal`) | `customer_id`             |
+| `dmart.mart_customer_reorders` | Produits achetés par client : quantité totale, nombre de commandes, dernier achat        | `customer_id` + `item_id` |
+| `dmart.mart_payments`          | Paiements enrichis avec infos client et commande                                         | `payment_id`              |
+| `dmart.mart_invoices`          | Factures enrichies avec statut d'échéance (`overdue` / `on_time`)                        | `invoice_id`              |
 
-- Unicité et non-nullité des clés primaires sur tous les modèles
-- Unicité des emails (admins + customers)
+#### Graphe du DAG
+
+```
+init_schemas
+    ├── dwh_stg_admins ──────┐
+    ├── dwh_stg_customers ───┤
+    ├── dwh_stg_items ────────┤
+    ├── dwh_stg_orders ───────┼──▶ dwh_done ──┬── dmart_sales_daily
+    ├── dwh_stg_order_items ──┤              ├── dmart_revenue_by_item
+    ├── dwh_stg_payments ─────┤              ├── dmart_customer_lifetime
+    └── dwh_stg_invoices ─────┘              ├── dmart_customer_reorders
+                                             ├── dmart_payments
+                                             └── dmart_invoices
+```
 
 ---
 
@@ -326,7 +356,7 @@ Modèles analytiques prêts pour la BI.
 | Data Warehouse   | PostgreSQL                    | 16          |
 | CDC              | Debezium (MySQL connector)    | 2.5.4       |
 | Streaming        | Apache Kafka (Confluent)      | 7.6.0       |
-| Transformation   | dbt-postgres                  | 1.8.0       |
+| Transformation   | Apache Airflow                | 2.9.2       |
 | Connecteur Sink  | Confluent JDBC Sink           | 10.7.6      |
 | CSS              | Tailwind CSS (CDN)            | —           |
 | PDF              | fpdf2                         | 2.7.9       |
@@ -353,13 +383,11 @@ Modèles analytiques prêts pour la BI.
 │   ├── templates/             # Jinja2 + Tailwind
 │   ├── Dockerfile
 │   └── requirements.txt
-├── dbt/
-│   ├── models/
-│   │   ├── staging/           # 7 vues de nettoyage
-│   │   └── marts/             # 6 tables analytiques
-│   ├── dbt_project.yml
-│   ├── profiles.yml
-│   └── Dockerfile
+├── airflow/
+│   └── dags/
+│       └── ecommerce_transformations.py   # DAG : staging → dwh → dmart
+├── postgres-dwh/
+│   └── init.sql               # Création des schémas staging / dwh / dmart
 ├── kafka-connect/
 │   ├── connectors/
 │   │   ├── source-mariadb.json   # Debezium → MariaDB
