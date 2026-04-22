@@ -52,22 +52,30 @@ Les modifications en base MariaDB sont capturées via **Debezium CDC**, transite
 
 ## Commandes Docker
 
-### Lancer tous les services
+### Premier démarrage (ou reset complet)
+
+> **Important** : utiliser `docker compose` (avec un espace), pas `docker compose-up`.
 
 ```bash
+# Reset complet : supprime tous les conteneurs ET les volumes (données effacées)
+docker compose down -v
+
+# Reconstruction complète et démarrage
 docker compose up --build -d
 ```
 
-### Arrêter les services (données persistées)
+Ce reset est nécessaire après tout changement de configuration (schémas PostgreSQL, connecteurs Kafka, etc.).
+
+### Arrêter les services (données conservées)
 
 ```bash
 docker compose down
 ```
 
-### Reconstruire et relancer
+### Relancer sans rebuild
 
 ```bash
-docker compose down && docker compose up --build -d
+docker compose up -d
 ```
 
 ### Voir les logs
@@ -79,6 +87,7 @@ docker compose logs -f
 # Un service spécifique
 docker compose logs -f api
 docker compose logs -f kafka-connect
+docker compose logs -f airflow-scheduler
 ```
 
 ### Vérifier l'état des services
@@ -87,15 +96,11 @@ docker compose logs -f kafka-connect
 docker compose ps
 ```
 
-### Supprimer les volumes (reset complet des données)
-
-```bash
-docker compose down -v
-```
-
 ---
 
 ## Commandes Kafka Connect
+
+> **Note** : le script `register.sh` supprime et recrée systématiquement les connecteurs à chaque démarrage de `connector-setup`. Toute modification de configuration est ainsi toujours appliquée.
 
 ### Lister les connecteurs enregistrés
 
@@ -109,41 +114,56 @@ curl http://localhost:8083/connectors
 # Source (Debezium → MariaDB)
 curl http://localhost:8083/connectors/mariadb-ecommerce-source/status
 
-# Sink (Kafka → PostgreSQL)
+# Sink (Kafka → PostgreSQL staging)
 curl http://localhost:8083/connectors/postgres-ecommerce-sink/status
+```
+
+### Forcer la réapplication des connecteurs
+
+```bash
+# Supprime et recrée le conteneur connector-setup (relance register.sh)
+docker compose up --force-recreate connector-setup
 ```
 
 ### Redémarrer un connecteur
 
 ```bash
 curl -X POST http://localhost:8083/connectors/mariadb-ecommerce-source/restart
-```
-
-### Supprimer et recréer un connecteur
-
-```bash
-curl -X DELETE http://localhost:8083/connectors/mariadb-ecommerce-source
-# Puis relancer le setup :
-docker compose restart connector-setup
+curl -X POST http://localhost:8083/connectors/postgres-ecommerce-sink/restart
 ```
 
 ---
 
 ## Commandes Airflow
 
-Airflow tourne en continu avec un schedule `*/15 * * * *`. Le DAG peut aussi être déclenché manuellement.
-
 ### Accéder à l'interface Web
 
 `http://localhost:8082` — identifiants : `admin` / `admin`
 
-### Déclencher le DAG manuellement
+> Si la connexion échoue, l'initialisation n'a pas encore terminé. Vérifier :
+> ```bash
+> docker compose logs airflow-init
+> ```
+> Si le conteneur `airflow-init` est en erreur ou n'a pas tourné :
+> ```bash
+> docker compose down -v && docker compose up --build -d
+> ```
+
+### Deux DAGs
+
+| DAG | Schedule | Rôle |
+|---|---|---|
+| `ecommerce_dwh_load` | `*/2 * * * *` | `staging.*` → `dwh.*` puis déclenche le suivant |
+| `ecommerce_dmart_load` | déclenché automatiquement | `dwh.*` → `dmart.*` |
+
+### Déclencher les DAGs manuellement
 
 ```bash
-# Via l'UI : bouton "Trigger DAG" sur le DAG ecommerce_transformations
+# Déclenche la chaîne complète (dwh_load → dmart_load)
+docker compose exec airflow-scheduler airflow dags trigger ecommerce_dwh_load
 
-# Via CLI :
-docker compose exec airflow-scheduler airflow dags trigger ecommerce_transformations
+# Déclencher uniquement le DMART (si le DWH est déjà à jour)
+docker compose exec airflow-scheduler airflow dags trigger ecommerce_dmart_load
 ```
 
 ### Voir les logs d'exécution
@@ -153,18 +173,19 @@ docker compose logs -f airflow-scheduler
 docker compose logs -f airflow-webserver
 ```
 
-### Vérifier l'état du DAG
+### Vérifier l'état des DAGs
 
 ```bash
 docker compose exec airflow-scheduler airflow dags list
-docker compose exec airflow-scheduler airflow tasks list ecommerce_transformations
+docker compose exec airflow-scheduler airflow tasks list ecommerce_dwh_load
+docker compose exec airflow-scheduler airflow tasks list ecommerce_dmart_load
 ```
 
-### Mettre le DAG en pause / reprendre
+### Mettre un DAG en pause / reprendre
 
 ```bash
-docker compose exec airflow-scheduler airflow dags pause ecommerce_transformations
-docker compose exec airflow-scheduler airflow dags unpause ecommerce_transformations
+docker compose exec airflow-scheduler airflow dags pause ecommerce_dwh_load
+docker compose exec airflow-scheduler airflow dags unpause ecommerce_dwh_load
 ```
 
 ---

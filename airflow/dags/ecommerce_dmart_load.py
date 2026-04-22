@@ -39,28 +39,34 @@ with DAG(
         postgres_conn_id=CONN_ID,
         sql="""
             DROP TABLE IF EXISTS dmart.mart_sales_daily CASCADE;
-            CREATE TABLE dmart.mart_sales_daily AS
-            WITH daily AS (
-                SELECT
-                    DATE_TRUNC('day', o.source_updated_at)::DATE    AS order_date,
-                    COUNT(DISTINCT o.order_id)                      AS nb_orders,
-                    SUM(oi.quantity)                                AS units_sold,
-                    SUM(oi.line_total_ht)                           AS revenue_ht,
-                    SUM(oi.line_total_ttc)                          AS revenue_ttc
-                FROM dwh.orders o
-                JOIN dwh.order_items oi ON oi.order_id = o.order_id
-                WHERE o.status = 'confirmed'
-                GROUP BY 1
-            )
-            SELECT
-                order_date,
-                nb_orders,
-                units_sold,
-                revenue_ht,
-                revenue_ttc,
-                SUM(revenue_ttc) OVER (ORDER BY order_date)     AS cumulative_revenue_ttc
-            FROM daily
-            ORDER BY order_date;
+            DO $$ BEGIN
+                IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'dwh' AND table_name = 'orders')
+                AND EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'dwh' AND table_name = 'order_items')
+                THEN
+                    CREATE TABLE dmart.mart_sales_daily AS
+                    WITH daily AS (
+                        SELECT
+                            DATE_TRUNC('day', o.source_updated_at)::DATE    AS order_date,
+                            COUNT(DISTINCT o.order_id)                      AS nb_orders,
+                            SUM(oi.quantity)                                AS units_sold,
+                            SUM(oi.line_total_ht)                           AS revenue_ht,
+                            SUM(oi.line_total_ttc)                          AS revenue_ttc
+                        FROM dwh.orders o
+                        JOIN dwh.order_items oi ON oi.order_id = o.order_id
+                        WHERE o.status = 'confirmed'
+                        GROUP BY 1
+                    )
+                    SELECT
+                        order_date,
+                        nb_orders,
+                        units_sold,
+                        revenue_ht,
+                        revenue_ttc,
+                        SUM(revenue_ttc) OVER (ORDER BY order_date)     AS cumulative_revenue_ttc
+                    FROM daily
+                    ORDER BY order_date;
+                END IF;
+            END $$;
         """,
     )
 
@@ -69,33 +75,40 @@ with DAG(
         postgres_conn_id=CONN_ID,
         sql="""
             DROP TABLE IF EXISTS dmart.mart_revenue_by_item CASCADE;
-            CREATE TABLE dmart.mart_revenue_by_item AS
-            WITH sales AS (
-                SELECT
-                    oi.item_id,
-                    COUNT(DISTINCT oi.order_id)         AS nb_orders,
-                    SUM(oi.quantity)                    AS total_units_sold,
-                    SUM(oi.line_total_ht)               AS total_revenue_ht,
-                    SUM(oi.line_total_ttc)              AS total_revenue_ttc
-                FROM dwh.order_items oi
-                JOIN dwh.orders o ON o.order_id = oi.order_id
-                WHERE o.status = 'confirmed'
-                GROUP BY oi.item_id
-            )
-            SELECT
-                i.item_id,
-                i.title,
-                i.price_ht,
-                i.price_ttc,
-                i.tva_rate,
-                i.quantity                              AS current_stock,
-                COALESCE(s.nb_orders, 0)               AS nb_orders,
-                COALESCE(s.total_units_sold, 0)        AS total_units_sold,
-                COALESCE(s.total_revenue_ht, 0)        AS total_revenue_ht,
-                COALESCE(s.total_revenue_ttc, 0)       AS total_revenue_ttc
-            FROM dwh.items i
-            LEFT JOIN sales s ON s.item_id = i.item_id
-            ORDER BY total_revenue_ttc DESC;
+            DO $$ BEGIN
+                IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'dwh' AND table_name = 'items')
+                AND EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'dwh' AND table_name = 'order_items')
+                AND EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'dwh' AND table_name = 'orders')
+                THEN
+                    CREATE TABLE dmart.mart_revenue_by_item AS
+                    WITH sales AS (
+                        SELECT
+                            oi.item_id,
+                            COUNT(DISTINCT oi.order_id)         AS nb_orders,
+                            SUM(oi.quantity)                    AS total_units_sold,
+                            SUM(oi.line_total_ht)               AS total_revenue_ht,
+                            SUM(oi.line_total_ttc)              AS total_revenue_ttc
+                        FROM dwh.order_items oi
+                        JOIN dwh.orders o ON o.order_id = oi.order_id
+                        WHERE o.status = 'confirmed'
+                        GROUP BY oi.item_id
+                    )
+                    SELECT
+                        i.item_id,
+                        i.title,
+                        i.price_ht,
+                        i.price_ttc,
+                        i.tva_rate,
+                        i.quantity                              AS current_stock,
+                        COALESCE(s.nb_orders, 0)               AS nb_orders,
+                        COALESCE(s.total_units_sold, 0)        AS total_units_sold,
+                        COALESCE(s.total_revenue_ht, 0)        AS total_revenue_ht,
+                        COALESCE(s.total_revenue_ttc, 0)       AS total_revenue_ttc
+                    FROM dwh.items i
+                    LEFT JOIN sales s ON s.item_id = i.item_id
+                    ORDER BY total_revenue_ttc DESC;
+                END IF;
+            END $$;
         """,
     )
 
@@ -104,28 +117,34 @@ with DAG(
         postgres_conn_id=CONN_ID,
         sql="""
             DROP TABLE IF EXISTS dmart.mart_customer_lifetime CASCADE;
-            CREATE TABLE dmart.mart_customer_lifetime AS
-            SELECT
-                c.customer_id,
-                c.first_name,
-                c.last_name,
-                c.email,
-                COUNT(o.order_id)                                       AS nb_orders,
-                COALESCE(SUM(o.total_ttc), 0)                           AS lifetime_value_ttc,
-                COALESCE(AVG(o.total_ttc), 0)                           AS avg_basket_ttc,
-                MIN(o.source_updated_at)                                AS first_order_at,
-                MAX(o.source_updated_at)                                AS last_order_at,
-                CASE
-                    WHEN COUNT(o.order_id) = 0               THEN 'no_order'
-                    WHEN COUNT(o.order_id) = 1               THEN 'one_time'
-                    WHEN COUNT(o.order_id) BETWEEN 2 AND 4   THEN 'recurring'
-                    ELSE 'loyal'
-                END                                                     AS customer_segment
-            FROM dwh.customers c
-            LEFT JOIN dwh.orders o
-                ON o.customer_id = c.customer_id AND o.status = 'confirmed'
-            GROUP BY c.customer_id, c.first_name, c.last_name, c.email
-            ORDER BY lifetime_value_ttc DESC;
+            DO $$ BEGIN
+                IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'dwh' AND table_name = 'customers')
+                AND EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'dwh' AND table_name = 'orders')
+                THEN
+                    CREATE TABLE dmart.mart_customer_lifetime AS
+                    SELECT
+                        c.customer_id,
+                        c.first_name,
+                        c.last_name,
+                        c.email,
+                        COUNT(o.order_id)                                       AS nb_orders,
+                        COALESCE(SUM(o.total_ttc), 0)                           AS lifetime_value_ttc,
+                        COALESCE(AVG(o.total_ttc), 0)                           AS avg_basket_ttc,
+                        MIN(o.source_updated_at)                                AS first_order_at,
+                        MAX(o.source_updated_at)                                AS last_order_at,
+                        CASE
+                            WHEN COUNT(o.order_id) = 0               THEN 'no_order'
+                            WHEN COUNT(o.order_id) = 1               THEN 'one_time'
+                            WHEN COUNT(o.order_id) BETWEEN 2 AND 4   THEN 'recurring'
+                            ELSE 'loyal'
+                        END                                                     AS customer_segment
+                    FROM dwh.customers c
+                    LEFT JOIN dwh.orders o
+                        ON o.customer_id = c.customer_id AND o.status = 'confirmed'
+                    GROUP BY c.customer_id, c.first_name, c.last_name, c.email
+                    ORDER BY lifetime_value_ttc DESC;
+                END IF;
+            END $$;
         """,
     )
 
@@ -134,22 +153,29 @@ with DAG(
         postgres_conn_id=CONN_ID,
         sql="""
             DROP TABLE IF EXISTS dmart.mart_customer_reorders CASCADE;
-            CREATE TABLE dmart.mart_customer_reorders AS
-            SELECT
-                o.customer_id,
-                oi.item_id,
-                i.title,
-                i.price_ttc,
-                SUM(oi.quantity)                                AS total_qty_purchased,
-                COUNT(DISTINCT oi.order_id)                     AS nb_orders_with_item,
-                MAX(o.source_updated_at)                        AS last_purchased_at,
-                i.quantity                                      AS current_stock
-            FROM dwh.order_items oi
-            JOIN dwh.orders  o ON o.order_id = oi.order_id
-            JOIN dwh.items   i ON i.item_id  = oi.item_id
-            WHERE o.status = 'confirmed'
-            GROUP BY o.customer_id, oi.item_id, i.title, i.price_ttc, i.quantity
-            ORDER BY o.customer_id, last_purchased_at DESC;
+            DO $$ BEGIN
+                IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'dwh' AND table_name = 'order_items')
+                AND EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'dwh' AND table_name = 'orders')
+                AND EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'dwh' AND table_name = 'items')
+                THEN
+                    CREATE TABLE dmart.mart_customer_reorders AS
+                    SELECT
+                        o.customer_id,
+                        oi.item_id,
+                        i.title,
+                        i.price_ttc,
+                        SUM(oi.quantity)                                AS total_qty_purchased,
+                        COUNT(DISTINCT oi.order_id)                     AS nb_orders_with_item,
+                        MAX(o.source_updated_at)                        AS last_purchased_at,
+                        i.quantity                                      AS current_stock
+                    FROM dwh.order_items oi
+                    JOIN dwh.orders  o ON o.order_id = oi.order_id
+                    JOIN dwh.items   i ON i.item_id  = oi.item_id
+                    WHERE o.status = 'confirmed'
+                    GROUP BY o.customer_id, oi.item_id, i.title, i.price_ttc, i.quantity
+                    ORDER BY o.customer_id, last_purchased_at DESC;
+                END IF;
+            END $$;
         """,
     )
 
@@ -158,23 +184,30 @@ with DAG(
         postgres_conn_id=CONN_ID,
         sql="""
             DROP TABLE IF EXISTS dmart.mart_payments CASCADE;
-            CREATE TABLE dmart.mart_payments AS
-            SELECT
-                p.payment_id,
-                p.order_id,
-                o.customer_id,
-                c.first_name,
-                c.last_name,
-                c.email,
-                p.amount,
-                p.payment_status,
-                p.payment_method,
-                p.transaction_id,
-                p.source_updated_at                             AS paid_at
-            FROM dwh.payments   p
-            JOIN dwh.orders     o ON o.order_id    = p.order_id
-            JOIN dwh.customers  c ON c.customer_id = o.customer_id
-            ORDER BY p.source_updated_at DESC;
+            DO $$ BEGIN
+                IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'dwh' AND table_name = 'payments')
+                AND EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'dwh' AND table_name = 'orders')
+                AND EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'dwh' AND table_name = 'customers')
+                THEN
+                    CREATE TABLE dmart.mart_payments AS
+                    SELECT
+                        p.payment_id,
+                        p.order_id,
+                        o.customer_id,
+                        c.first_name,
+                        c.last_name,
+                        c.email,
+                        p.amount,
+                        p.payment_status,
+                        p.payment_method,
+                        p.transaction_id,
+                        p.source_updated_at                             AS paid_at
+                    FROM dwh.payments   p
+                    JOIN dwh.orders     o ON o.order_id    = p.order_id
+                    JOIN dwh.customers  c ON c.customer_id = o.customer_id
+                    ORDER BY p.source_updated_at DESC;
+                END IF;
+            END $$;
         """,
     )
 
@@ -183,28 +216,35 @@ with DAG(
         postgres_conn_id=CONN_ID,
         sql="""
             DROP TABLE IF EXISTS dmart.mart_invoices CASCADE;
-            CREATE TABLE dmart.mart_invoices AS
-            SELECT
-                i.invoice_id,
-                i.invoice_number,
-                i.order_id,
-                o.customer_id,
-                c.first_name,
-                c.last_name,
-                c.email,
-                i.total_ht,
-                i.total_tva,
-                i.total_ttc,
-                i.issued_at,
-                i.due_date,
-                CASE
-                    WHEN i.due_date < CURRENT_DATE THEN 'overdue'
-                    ELSE 'on_time'
-                END                                             AS due_status
-            FROM dwh.invoices    i
-            JOIN dwh.orders      o ON o.order_id    = i.order_id
-            JOIN dwh.customers   c ON c.customer_id = o.customer_id
-            ORDER BY i.issued_at DESC;
+            DO $$ BEGIN
+                IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'dwh' AND table_name = 'invoices')
+                AND EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'dwh' AND table_name = 'orders')
+                AND EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'dwh' AND table_name = 'customers')
+                THEN
+                    CREATE TABLE dmart.mart_invoices AS
+                    SELECT
+                        i.invoice_id,
+                        i.invoice_number,
+                        i.order_id,
+                        o.customer_id,
+                        c.first_name,
+                        c.last_name,
+                        c.email,
+                        i.total_ht,
+                        i.total_tva,
+                        i.total_ttc,
+                        i.issued_at,
+                        i.due_date,
+                        CASE
+                            WHEN i.due_date < CURRENT_DATE THEN 'overdue'
+                            ELSE 'on_time'
+                        END                                             AS due_status
+                    FROM dwh.invoices    i
+                    JOIN dwh.orders      o ON o.order_id    = i.order_id
+                    JOIN dwh.customers   c ON c.customer_id = o.customer_id
+                    ORDER BY i.issued_at DESC;
+                END IF;
+            END $$;
         """,
     )
 

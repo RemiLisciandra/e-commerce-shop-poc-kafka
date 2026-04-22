@@ -77,12 +77,14 @@ services:
         condition: service_healthy
     environment:
       MYSQL_PWD: rootpassword
-    command: >
-      sh -c "mysql -h mariadb -u root -e \"
-        CREATE USER IF NOT EXISTS 'debezium'@'%' IDENTIFIED BY 'debeziumpassword';
+    command:
+      - sh
+      - -c
+      - "until mysql -h mariadb -u root -e 'SELECT 1' > /dev/null 2>&1; do echo 'Waiting for MariaDB...'; sleep 2; done;
+        mysql -h mariadb -u root -e
+        \"CREATE USER IF NOT EXISTS 'debezium'@'%' IDENTIFIED BY 'debeziumpassword';
         GRANT SELECT, RELOAD, SHOW DATABASES, REPLICATION SLAVE, REPLICATION CLIENT, LOCK TABLES ON *.* TO 'debezium'@'%';
-        FLUSH PRIVILEGES;
-      \""
+        FLUSH PRIVILEGES;\""
 
   # ── Kafka stack ────────────────────────────────────────────────────────────
   zookeeper:
@@ -162,7 +164,11 @@ services:
         condition: service_healthy
     volumes:
       - ./kafka-connect/connectors:/connectors:ro
-    command: ["/bin/sh", "/connectors/register.sh"]
+    # sed strips Windows CRLF (\r) to prevent "not found" errors on Linux
+    command:
+      - /bin/sh
+      - -c
+      - "sed 's/\\r//' /connectors/register.sh | /bin/sh"
 
   # ── Kafka UI ───────────────────────────────────────────────────────────────
   kafka-ui:
@@ -234,16 +240,22 @@ services:
       AIRFLOW__CORE__FERNET_KEY: "46BKJoQYlPPOexq0OhDZnIlNepKFf87WFwLt0nfd6gM="
       AIRFLOW__WEBSERVER__SECRET_KEY: "airflow-secret-key-poc"
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
       AIRFLOW_CONN_POSTGRES_DWH: "postgresql://dwh_user:dwhpassword@postgres-dwh:5432/ecommerce_dwh"
-    command: >
-      bash -c "airflow db migrate &&
-               airflow users create
-               --username admin
-               --firstname Admin
-               --lastname User
-               --role Admin
-               --email admin@shop.com
-               --password admin || true"
+    command:
+      - bash
+      - -c
+      - |
+        set -e
+        airflow db migrate
+        airflow users create \
+          --username admin \
+          --firstname Admin \
+          --lastname User \
+          --role Admin \
+          --email admin@airflow.com \
+          --password admin \
+        || true
 
   airflow-webserver:
     image: apache/airflow:2.9.2
@@ -262,6 +274,7 @@ services:
       AIRFLOW__CORE__FERNET_KEY: "46BKJoQYlPPOexq0OhDZnIlNepKFf87WFwLt0nfd6gM="
       AIRFLOW__WEBSERVER__SECRET_KEY: "airflow-secret-key-poc"
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
       AIRFLOW_CONN_POSTGRES_DWH: "postgresql://dwh_user:dwhpassword@postgres-dwh:5432/ecommerce_dwh"
     command: webserver
     healthcheck:
@@ -286,6 +299,7 @@ services:
       AIRFLOW__CORE__FERNET_KEY: "46BKJoQYlPPOexq0OhDZnIlNepKFf87WFwLt0nfd6gM="
       AIRFLOW__WEBSERVER__SECRET_KEY: "airflow-secret-key-poc"
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
       AIRFLOW_CONN_POSTGRES_DWH: "postgresql://dwh_user:dwhpassword@postgres-dwh:5432/ecommerce_dwh"
     command: scheduler
 

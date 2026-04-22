@@ -1,6 +1,6 @@
 #!/bin/sh
 # Waits for Kafka Connect REST API then registers all connectors.
-# This script is run by the connector-setup service on first start.
+# Always deletes and re-registers to ensure the latest config is applied.
 
 CONNECT_URL="http://kafka-connect:8083"
 
@@ -15,11 +15,12 @@ register() {
   local name=$1
   local file=$2
 
-  # Check if connector already exists
+  # Delete if already exists to ensure config changes are always applied
   status=$(curl -so /dev/null -w "%{http_code}" "${CONNECT_URL}/connectors/${name}")
   if [ "$status" = "200" ]; then
-    echo "[SKIP] Connector '${name}' already registered."
-    return
+    echo "[DELETE] Connector '${name}' already exists, deleting before re-register..."
+    curl -s -X DELETE "${CONNECT_URL}/connectors/${name}"
+    sleep 2
   fi
 
   echo "[REGISTER] ${name}..."
