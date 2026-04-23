@@ -8,15 +8,15 @@ Les modifications en base MariaDB sont capturées via **Debezium CDC**, transite
 ## Architecture
 
 ```
-┌──────────────┐      binlogs       ┌──────────────┐       topics       ┌──────────────────┐
-│   MariaDB    │ ──────────────────▶ │    Kafka      │ ──────────────────▶ │    PostgreSQL    │
-│  (OLTP)      │     Debezium CDC    │   (Broker)    │    JDBC Sink       │ schema: staging  │
+┌──────────────┐      binlogs       ┌──────────────┐       topics         ┌──────────────────┐
+│   MariaDB    │ ──────────────────▶ │    Kafka      │ ─────────────── ─▶│    PostgreSQL    │
+│  (OLTP)      │     Debezium CDC    │   (Broker)    │    JDBC Sink       │ schema.staging   │
 └──────────────┘                     └──────────────┘                     └────────┬─────────┘
        ▲                                                                           │
-       │                                                              Airflow DAG (*/15 min)
+       │                                                              Airflow DAG (*/2 min)
 ┌──────┴───────┐                                                   ┌───────────────▼─────────────┐
-│   FastAPI    │                                                   │  dwh.stg_*   (7 tables)     │
-│   (Shop)     │                                                   │  dmart.mart_* (6 tables)    │
+│   FastAPI    │                                                   │  schema.dwh   (7 tables)    │
+│   (Shop)     │                                                   │  schema.dmart (6 tables)    │
 └──────────────┘                                                   └─────────────────────────────┘
 ```
 
